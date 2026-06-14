@@ -1,0 +1,23 @@
+# Runtime/session/temp files
+sess_*
+tmp_sessions/
+*.tmp
+*.log
+
+# Composer dependencies
+/vendor/
+/NEW_CAR_RENTAL_SYSTEM/vendor/
+
+# Local editor/system files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Uploaded user files and private documents
+/uploads/
+/NEW_CAR_RENTAL_SYSTEM/assets/uploads/documents/
+/NEW_CAR_RENTAL_SYSTEM/assets/uploads/profile/
+
+# Local environment files
+.env
+*.local
