@@ -61,9 +61,105 @@ function time_ago($datetime) {
 }
 
 // 抓取当前登录的管理员名字，如果没设置则默认显示 System Admin
-$admin_name = isset($_SESSION['admin_name']) ? $_SESSION['admin_name'] : 'System Admin'; 
+$admin_name = current_admin_name(); 
+
+function activity_e($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function audit_activity_style(string $action_type): array
+{
+    $action = strtoupper($action_type);
+
+    if (str_contains($action, 'BOOKING') || str_contains($action, 'HANDOVER') || str_contains($action, 'RETURN')) {
+        return ['icon' => '<i class="fas fa-calendar-check text-[8px] text-blue-600"></i>', 'bg' => 'bg-blue-100 border-2 border-white'];
+    }
+    if (str_contains($action, 'KYC') || str_contains($action, 'DOCUMENT')) {
+        return ['icon' => '<i class="fas fa-id-card text-[8px] text-emerald-600"></i>', 'bg' => 'bg-emerald-100 border-2 border-white'];
+    }
+    if (str_contains($action, 'PROMO')) {
+        return ['icon' => '<i class="fas fa-ticket-alt text-[8px] text-purple-600"></i>', 'bg' => 'bg-purple-100 border-2 border-white'];
+    }
+    if (str_contains($action, 'DELETE') || str_contains($action, 'REJECT') || str_contains($action, 'CANCEL')) {
+        return ['icon' => '<i class="fas fa-exclamation text-[8px] text-red-600"></i>', 'bg' => 'bg-red-100 border-2 border-white'];
+    }
+    if (str_contains($action, 'CONTACT') || str_contains($action, 'REPLY')) {
+        return ['icon' => '<i class="fas fa-envelope text-[8px] text-cyan-600"></i>', 'bg' => 'bg-cyan-100 border-2 border-white'];
+    }
+    if (str_contains($action, 'CATEGORY') || str_contains($action, 'BRAND') || str_contains($action, 'CREATE') || str_contains($action, 'UPDATE')) {
+        return ['icon' => '<i class="fas fa-tools text-[8px] text-amber-600"></i>', 'bg' => 'bg-amber-100 border-2 border-white'];
+    }
+
+    return ['icon' => '<i class="fas fa-bolt text-[8px] text-slate-600"></i>', 'bg' => 'bg-slate-100 border-2 border-white'];
+}
+
+function audit_activity_title(string $action_type): string
+{
+    $action = strtoupper($action_type);
+    $map = [
+        'CREATE' => 'Vehicle Created',
+        'UPDATE' => 'Vehicle Updated',
+        'DELETE' => 'Vehicle Deleted',
+        'BOOKING_APPROVED' => 'Booking Approved',
+        'BOOKING_HANDOVER' => 'Vehicle Handover',
+        'BOOKING_RETURNED' => 'Vehicle Returned',
+        'BOOKING_CANCELLED' => 'Booking Cancelled',
+        'BOOKING_REJECTED' => 'Booking Rejected',
+        'PROMO_CREATED' => 'Promo Code Created',
+        'PROMO_UPDATED' => 'Promo Code Updated',
+        'PROMO_ENABLED' => 'Promo Code Enabled',
+        'PROMO_DISABLED' => 'Promo Code Disabled',
+        'PROMO_DELETED' => 'Promo Code Deleted',
+        'CONTACT_REPLIED' => 'Contact Message Replied',
+        'CONTACT_REPLY_FAILED' => 'Contact Reply Failed',
+        'CATEGORY_CREATED' => 'Category Created',
+        'CATEGORY_UPDATED' => 'Category Updated',
+        'CATEGORY_DELETED' => 'Category Deleted',
+        'BRAND_CREATED' => 'Brand Created',
+        'BRAND_UPDATED' => 'Brand Updated',
+        'BRAND_DELETED' => 'Brand Deleted',
+        'ADMIN_CREATED' => 'Admin Created',
+        'ADMIN_UPDATED' => 'Admin Updated',
+        'ADMIN_DELETED' => 'Admin Deleted',
+        'ADMIN_STATUS_CHANGED' => 'Admin Status Changed',
+    ];
+
+    return $map[$action] ?? ucwords(strtolower(str_replace('_', ' ', $action)));
+}
 
 $live_activities = [];
+if (db_table_exists($conn, 'audit_logs')) {
+    $audit_res = $conn->query("SELECT * FROM audit_logs ORDER BY created_at DESC, id DESC LIMIT 12");
+    while ($audit = $audit_res->fetch_assoc()) {
+        $style = audit_activity_style($audit['action_type'] ?? '');
+        $target = trim((string)($audit['car_model'] ?? ''));
+        if ($target === '' && !empty($audit['target_type'])) {
+            $target = ucwords(str_replace('_', ' ', (string)$audit['target_type']));
+            if (!empty($audit['target_id'])) {
+                $target .= ' #' . (int)$audit['target_id'];
+            }
+        }
+
+        $desc = "<span class='font-bold text-slate-700'>" . activity_e($audit['admin_name'] ?? 'System Admin') . "</span>";
+        if ($target !== '') {
+            $desc .= " updated <span class='font-bold text-slate-700'>" . activity_e($target) . "</span>. ";
+        } else {
+            $desc .= " performed an admin action. ";
+        }
+        $desc .= activity_e($audit['details'] ?? '');
+
+        $live_activities[] = [
+            'sort_time' => strtotime($audit['created_at'] ?? 'now'),
+            'time' => time_ago($audit['created_at'] ?? date('Y-m-d H:i:s')),
+            'title' => audit_activity_title($audit['action_type'] ?? 'ADMIN_ACTION'),
+            'desc' => $desc,
+            'icon' => $style['icon'],
+            'bg' => $style['bg'],
+            'extra' => ''
+        ];
+    }
+}
 // 抓取最近的真实订单事件
 $feed_res = $conn->query("SELECT b.booking_reference, b.booking_status, b.grand_total, b.created_at, u.name as customer_name, (SELECT c.car_name FROM booking_items bi JOIN cars c ON bi.car_id = c.id WHERE bi.booking_id = b.id LIMIT 1) as car_name FROM bookings b JOIN users u ON b.user_id = u.id ORDER BY b.created_at DESC LIMIT 5");
 
@@ -75,40 +171,46 @@ while($f = $feed_res->fetch_assoc()) {
     // 智能事件映射机制
     if ($st == 'completed') {
         $live_activities[] = [
+            'sort_time' => strtotime($f['created_at']),
             'time' => $time_str, 'title' => 'Vehicle Returned',
-            'desc' => "{$f['car_name']} checked in successfully. No damages reported.",
+            'desc' => activity_e($f['car_name']) . " checked in successfully. No damages reported.",
             'icon' => '<i class="fas fa-undo-alt text-[8px] text-blue-600"></i>', 'bg' => 'bg-blue-100 border-2 border-white', 'extra' => ''
         ];
     } elseif ($st == 'confirmed') {
         // Confirmed 状态：我们动态拆分成 "管理员审批通过" 和 "定金到账" 两个连贯动作
         $live_activities[] = [
+            'sort_time' => strtotime($f['created_at']),
             'time' => $time_str, 'title' => 'KYC Verification Completed',
-            'desc' => "Customer <span class='font-bold text-slate-700'>{$f['customer_name']}</span> identity documents verified by <span class='text-emerald-600 font-bold'>{$admin_name}</span>.",
+            'desc' => "Customer <span class='font-bold text-slate-700'>" . activity_e($f['customer_name']) . "</span> identity documents verified by <span class='text-emerald-600 font-bold'>" . activity_e($admin_name) . "</span>.",
             'icon' => '<i class="fas fa-id-card text-[8px] text-emerald-600"></i>', 'bg' => 'bg-emerald-100 border-2 border-white', 'extra' => ''
         ];
         $live_activities[] = [
+            'sort_time' => strtotime($f['created_at'] . ' - 5 minutes'),
             'time' => time_ago(date('Y-m-d H:i:s', strtotime($f['created_at'] . ' - 5 minutes'))), 
             'title' => 'Deposit Received',
-            'desc' => "RM " . number_format($f['grand_total'], 2) . " security deposit captured via FPX (Ref: #{$f['booking_reference']}).",
+            'desc' => "RM " . number_format($f['grand_total'], 2) . " security deposit captured via FPX (Ref: #" . activity_e($f['booking_reference']) . ").",
             'icon' => '<i class="fas fa-money-bill-wave text-[8px] text-white"></i>', 'bg' => 'bg-slate-800 border-2 border-white', 'extra' => ''
         ];
     } elseif ($st == 'pending' || $st == '') {
         $live_activities[] = [
-            'time' => $time_str, 'title' => 'System detected overlapping booking',
-            'desc' => "{$f['car_name']} requested by {$f['customer_name']} conflicts with existing reservation.",
+            'sort_time' => strtotime($f['created_at']),
+            'time' => $time_str, 'title' => 'New Booking Pending',
+            'desc' => activity_e($f['car_name']) . " requested by " . activity_e($f['customer_name']) . " is waiting for admin review.",
             'icon' => '<i class="fas fa-exclamation-triangle text-[8px] text-amber-600"></i>', 'bg' => 'bg-amber-100 border-2 border-white',
-            'extra' => '<span class="mt-2 inline-block px-2 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded border border-amber-200">Medium Risk</span>'
+            'extra' => '<span class="mt-2 inline-block px-2 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded border border-amber-200">Pending Review</span>'
         ];
     } elseif ($st == 'active') {
         $live_activities[] = [
+            'sort_time' => strtotime($f['created_at']),
             'time' => $time_str, 'title' => 'Vehicle Handover',
-            'desc' => "{$f['car_name']} keys handed over to {$f['customer_name']}. Vehicle is now on the road.",
+            'desc' => activity_e($f['car_name']) . " keys handed over to " . activity_e($f['customer_name']) . ". Vehicle is now on the road.",
             'icon' => '<i class="fas fa-car-side text-[8px] text-teal-600"></i>', 'bg' => 'bg-teal-100 border-2 border-white', 'extra' => ''
         ];
     }
 }
 // 截取前 4 个确保 UI 排版不乱
-$live_activities = array_slice($live_activities, 0, 4);
+usort($live_activities, fn($a, $b) => ($b['sort_time'] ?? 0) <=> ($a['sort_time'] ?? 0));
+$live_activities = array_slice($live_activities, 0, 8);
 ?>
 <!DOCTYPE html>
 <html lang="en">

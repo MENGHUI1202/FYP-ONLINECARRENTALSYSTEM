@@ -68,6 +68,36 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
             }
             
             // 提交事务
+            $meta_res = $conn->query("
+                SELECT b.booking_reference, u.name AS customer_name,
+                       (SELECT CONCAT(c.brand, ' ', c.car_name)
+                        FROM booking_items bi
+                        JOIN cars c ON c.id = bi.car_id
+                        WHERE bi.booking_id = b.booking_id
+                        LIMIT 1) AS car_label
+                FROM bookings b
+                LEFT JOIN users u ON u.user_id = b.user_id
+                WHERE b.booking_id = $id
+                LIMIT 1
+            ");
+            $meta = $meta_res ? $meta_res->fetch_assoc() : [];
+            $ref = $meta['booking_reference'] ?? ('#' . $id);
+            $customer = $meta['customer_name'] ?? 'Customer';
+            $car_label = trim((string)($meta['car_label'] ?? ''));
+            $audit_actions = [
+                'approved' => ['BOOKING_APPROVED', 'approved booking'],
+                'active' => ['BOOKING_HANDOVER', 'executed handover for booking'],
+                'completed' => ['BOOKING_RETURNED', 'processed return for booking'],
+                'cancelled' => ['BOOKING_CANCELLED', 'cancelled booking'],
+                'rejected' => ['BOOKING_REJECTED', 'rejected booking'],
+            ];
+            [$audit_type, $audit_phrase] = $audit_actions[$action] ?? ['BOOKING_UPDATED', 'updated booking'];
+            $audit_details = ucfirst($audit_phrase) . " {$ref} for {$customer}.";
+            if ($notes !== '') {
+                $audit_details .= " Note: {$notes}";
+            }
+            admin_audit_log($conn, $audit_type, $audit_details, 'booking', $id, $car_label !== '' ? $car_label : null);
+
             $conn->commit();
             $msg = ($action == 'completed') ? 'returned' : 'updated';
             header("Location: manage_bookings.php?msg=$msg"); 

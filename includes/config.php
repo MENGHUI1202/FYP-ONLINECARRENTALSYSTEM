@@ -38,4 +38,54 @@ function current_admin_id(): int
 {
     return (int)($_SESSION['admin_id'] ?? $_SESSION['id'] ?? 0);
 }
+
+function current_admin_name(): string
+{
+    $name = $_SESSION['admin_name'] ?? $_SESSION['admin_username'] ?? $_SESSION['username'] ?? $_SESSION['name'] ?? '';
+    $name = trim((string)$name);
+
+    if ($name !== '') {
+        return $name;
+    }
+
+    $admin_id = current_admin_id();
+    return $admin_id > 0 ? 'Admin ID: ' . $admin_id : 'System Admin';
+}
+
+function admin_audit_log(mysqli $conn, string $action_type, string $details, ?string $target_type = null, ?int $target_id = null, ?string $car_model = null): void
+{
+    try {
+        if (!db_table_exists($conn, 'audit_logs')) {
+            $conn->query("
+                CREATE TABLE audit_logs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    admin_id INT NULL,
+                    admin_name VARCHAR(100) NOT NULL,
+                    action_type VARCHAR(50) NOT NULL,
+                    target_type VARCHAR(50) NULL,
+                    target_id INT NULL,
+                    car_model VARCHAR(100) NULL,
+                    details TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    KEY idx_admin_id (admin_id),
+                    KEY idx_target (target_type, target_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        }
+
+        $admin_id = current_admin_id();
+        $admin_id_param = $admin_id > 0 ? $admin_id : null;
+        $admin_name = current_admin_name();
+
+        $stmt = $conn->prepare("
+            INSERT INTO audit_logs (admin_id, admin_name, action_type, target_type, target_id, car_model, details)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->bind_param('isssiss', $admin_id_param, $admin_name, $action_type, $target_type, $target_id, $car_model, $details);
+        $stmt->execute();
+        $stmt->close();
+    } catch (Throwable $ex) {
+        // Audit logging must never block an admin operation.
+    }
+}
 ?>

@@ -6,13 +6,17 @@ checkLogin();
 // --- 1. 删除操作 ---
 if (isset($_GET['del_cat'])) {
     $id = intval($_GET['del_cat']);
+    $old = $conn->query("SELECT name FROM vehicle_categories WHERE id = $id LIMIT 1")->fetch_assoc();
     $conn->query("DELETE FROM vehicle_categories WHERE id = $id");
+    admin_audit_log($conn, 'CATEGORY_DELETED', "Deleted body type " . ($old['name'] ?? '#' . $id) . ".", 'vehicle_category', $id);
     header("Location: manage_categories.php?msg=deleted");
     exit;
 }
 if (isset($_GET['del_brand'])) {
     $id = intval($_GET['del_brand']);
+    $old = $conn->query("SELECT brand_name FROM brands WHERE id = $id LIMIT 1")->fetch_assoc();
     $conn->query("DELETE FROM brands WHERE id = $id");
+    admin_audit_log($conn, 'BRAND_DELETED', "Deleted brand " . ($old['brand_name'] ?? '#' . $id) . ".", 'brand', $id);
     header("Location: manage_categories.php?msg=deleted");
     exit;
 }
@@ -24,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['add_category'])) {
         $name = $conn->real_escape_string($_POST['category_name']);
         $conn->query("INSERT INTO vehicle_categories (name) VALUES ('$name')");
+        admin_audit_log($conn, 'CATEGORY_CREATED', "Created body type {$name}.", 'vehicle_category', (int)$conn->insert_id);
         header("Location: manage_categories.php?msg=added");
         exit;
     }
@@ -33,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $id = intval($_POST['cat_id']);
         $name = $conn->real_escape_string($_POST['category_name']);
         $conn->query("UPDATE vehicle_categories SET name='$name' WHERE id=$id");
+        admin_audit_log($conn, 'CATEGORY_UPDATED', "Updated body type to {$name}.", 'vehicle_category', $id);
         header("Location: manage_categories.php?msg=updated");
         exit;
     }
@@ -55,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($new_brand_id > 0) {
             $conn->query("UPDATE brands SET id = brand_id WHERE brand_id = $new_brand_id");
         }
+        admin_audit_log($conn, 'BRAND_CREATED', "Created brand {$name}.", 'brand', $new_brand_id);
         header("Location: manage_categories.php?msg=added");
         exit;
     }
@@ -79,6 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // 没有上传新照片，只更新名称，保留原有照片
             $conn->query("UPDATE brands SET brand_name='$name' WHERE id=$id");
         }
+        admin_audit_log($conn, 'BRAND_UPDATED', "Updated brand to {$name}.", 'brand', $id);
         header("Location: manage_categories.php?msg=updated");
         exit;
     }

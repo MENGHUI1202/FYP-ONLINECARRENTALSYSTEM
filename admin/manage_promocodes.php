@@ -70,6 +70,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     if ($action === 'save_promo') {
         $promoId = (int)($_POST['promo_id'] ?? 0);
+        $isEdit = $promoId > 0;
         $promoName = trim($_POST['promo_name'] ?? '');
         $promoCode = pc_code($_POST['promo_code'] ?? '');
         $discount = max(1, min(100, (int)($_POST['discount_percent'] ?? 0)));
@@ -111,6 +112,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $assign->execute();
                     $assign->close();
                 }
+                $targetText = $assignedUserId > 0 ? " Assigned to user #{$assignedUserId}." : " Available for public use.";
+                admin_audit_log(
+                    $conn,
+                    $isEdit ? 'PROMO_UPDATED' : 'PROMO_CREATED',
+                    ($isEdit ? 'Updated' : 'Created') . " promo code {$promoCode} ({$discount}% discount)." . $targetText,
+                    'promo_code',
+                    $promoId
+                );
                 header('Location: manage_promocodes.php?msg=saved');
                 exit;
             }
@@ -125,12 +134,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $stmt = $conn->prepare("UPDATE promo_codes SET status=?, disabled_at=" . ($newStatus === 'inactive' ? 'NOW()' : 'NULL') . ", updated_at=NOW() WHERE id=? AND deleted_at IS NULL");
         $stmt->bind_param('si', $newStatus, $promoId);
         $stmt->execute();
+        $code_res = $conn->query("SELECT promo_code FROM promo_codes WHERE id=$promoId LIMIT 1");
+        $code = $code_res ? ($code_res->fetch_assoc()['promo_code'] ?? ('#' . $promoId)) : ('#' . $promoId);
+        admin_audit_log(
+            $conn,
+            $newStatus === 'active' ? 'PROMO_ENABLED' : 'PROMO_DISABLED',
+            ($newStatus === 'active' ? 'Enabled' : 'Disabled') . " promo code {$code}.",
+            'promo_code',
+            $promoId
+        );
         header('Location: manage_promocodes.php?msg=status');
         exit;
     }
 
     if ($action === 'delete_promo') {
         $promoId = (int)($_POST['promo_id'] ?? 0);
+        $code_res = $conn->query("SELECT promo_code FROM promo_codes WHERE id=$promoId LIMIT 1");
+        $code = $code_res ? ($code_res->fetch_assoc()['promo_code'] ?? ('#' . $promoId)) : ('#' . $promoId);
         $stmt = $conn->prepare("UPDATE promo_codes SET status='inactive', disabled_at=IFNULL(disabled_at,NOW()), deleted_at=NOW(), updated_at=NOW() WHERE id=?");
         $stmt->bind_param('i', $promoId);
         $stmt->execute();
@@ -139,6 +159,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $stmt->bind_param('i', $promoId);
         $stmt->execute();
 
+        admin_audit_log($conn, 'PROMO_DELETED', "Deleted promo code {$code} from active management. Usage history was kept.", 'promo_code', $promoId);
         header('Location: manage_promocodes.php?msg=deleted');
         exit;
     }

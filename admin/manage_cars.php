@@ -240,6 +240,12 @@ $logs_res = $conn->query("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 15");
                     <option value="<?php echo strtolower($t['type']); ?>"><?php echo $t['type']; ?></option>
                 <?php endwhile; } ?>
             </select>
+            <select id="brandFilter" class="px-5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none cursor-pointer text-sm">
+                <option value="">All Brands</option>
+                <?php foreach($all_brands as $brand_name): ?>
+                    <option value="<?php echo htmlspecialchars(strtolower($brand_name), ENT_QUOTES); ?>"><?php echo htmlspecialchars($brand_name); ?></option>
+                <?php endforeach; ?>
+            </select>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="carGrid">
@@ -256,7 +262,7 @@ $logs_res = $conn->query("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 15");
                     if(strpos($img, 'http') !== 0 && strpos($img, 'car_image/') === false && strpos($img, '../') === false) $img = 'car_image/' . $img; 
                 }
             ?>
-            <div class="car-item bg-white border border-slate-100 group rounded-3xl overflow-hidden flex flex-col hover:shadow-xl transition-all" data-title="<?php echo strtolower($car['car_name'] . ' ' . $car['brand']); ?>" data-category="<?php echo strtolower($car['type']); ?>">
+            <div class="car-item bg-white border border-slate-100 group rounded-3xl overflow-hidden flex flex-col hover:shadow-xl transition-all" data-title="<?php echo htmlspecialchars(strtolower($car['car_name'] . ' ' . $car['brand']), ENT_QUOTES); ?>" data-category="<?php echo htmlspecialchars(strtolower($car['type']), ENT_QUOTES); ?>" data-brand="<?php echo htmlspecialchars(strtolower($car['brand']), ENT_QUOTES); ?>">
                 
                 <div class="relative car-image-container h-40 overflow-hidden bg-slate-50 flex items-center justify-center border-b border-slate-100">
                     <?php if($img): ?>
@@ -536,14 +542,21 @@ $logs_res = $conn->query("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 15");
         function filterCars() {
             const searchValue = document.getElementById('carSearch').value.toLowerCase();
             const catValue = document.getElementById('catFilter').value.toLowerCase();
+            const brandValue = document.getElementById('brandFilter').value.toLowerCase();
             document.querySelectorAll('.car-item').forEach(el => {
                 const title = el.getAttribute('data-title');
                 const category = el.getAttribute('data-category');
-                el.style.display = (title.includes(searchValue) && (catValue === '' || category === catValue)) ? 'flex' : 'none';
+                const brand = el.getAttribute('data-brand');
+                el.style.display = (
+                    title.includes(searchValue) &&
+                    (catValue === '' || category === catValue) &&
+                    (brandValue === '' || brand === brandValue)
+                ) ? 'flex' : 'none';
             });
         }
         document.getElementById('carSearch').addEventListener('input', filterCars);
         document.getElementById('catFilter').addEventListener('change', filterCars);
+        document.getElementById('brandFilter').addEventListener('change', filterCars);
 
         // 点击背景关闭所有 Modal
         window.onclick = function(e) {

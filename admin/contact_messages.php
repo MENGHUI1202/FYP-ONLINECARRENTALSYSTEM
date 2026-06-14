@@ -93,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_message_id'])) 
             ");
             $stmt->bind_param('sii', $replyBody, $adminId, $messageId);
             $stmt->execute();
+            admin_audit_log($conn, 'CONTACT_REPLIED', "Replied to {$message['email']} about \"{$message['subject']}\".", 'contact_message', $messageId);
             $notice = 'Reply email sent successfully.';
         } catch (Throwable $ex) {
             $mailError = $ex->getMessage();
@@ -105,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_message_id'])) 
             ");
             $stmt->bind_param('ssi', $replyBody, $mailError, $messageId);
             $stmt->execute();
+            admin_audit_log($conn, 'CONTACT_REPLY_FAILED', "Reply to {$message['email']} failed: {$mailError}", 'contact_message', $messageId);
             $error = 'Email failed to send: ' . $mailError;
         }
     }

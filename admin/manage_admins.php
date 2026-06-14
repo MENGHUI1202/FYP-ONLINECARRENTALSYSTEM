@@ -35,7 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['del']) || isset($_GET[
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
                 $stmt = $conn->prepare("INSERT INTO admin (username, password, role, perm_fleet, perm_bookings, perm_users) VALUES (?, ?, ?, ?, ?, ?)");
                 $stmt->bind_param("sssiii", $username, $hashed_password, $role, $perm_fleet, $perm_bookings, $perm_users);
-                if ($stmt->execute()) { header("Location: manage_admins.php?msg=added"); exit; }
+                if ($stmt->execute()) {
+                    admin_audit_log($conn, 'ADMIN_CREATED', "Created admin account {$username} with {$role} role.", 'admin', (int)$conn->insert_id);
+                    header("Location: manage_admins.php?msg=added"); exit;
+                }
             }
         }
     }
@@ -61,7 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['del']) || isset($_GET[
                 $stmt = $conn->prepare("UPDATE admin SET username=?, role=?, perm_fleet=?, perm_bookings=?, perm_users=? WHERE id=?");
                 $stmt->bind_param("ssiiii", $username, $role, $perm_fleet, $perm_bookings, $perm_users, $id);
             }
-            if ($stmt->execute()) { header("Location: manage_admins.php?msg=updated"); exit; }
+            if ($stmt->execute()) {
+                admin_audit_log($conn, 'ADMIN_UPDATED', "Updated admin account {$username} with {$role} role.", 'admin', (int)$id);
+                header("Location: manage_admins.php?msg=updated"); exit;
+            }
         }
     }
 
@@ -69,7 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['del']) || isset($_GET[
     if (isset($_GET['del'])) {
         $id = intval($_GET['del']);
         if ($id == $_SESSION['admin_id']) { echo "<script>alert('You cannot delete your own account!'); window.location.href='manage_admins.php';</script>"; exit; }
+        $old = $conn->query("SELECT username FROM admin WHERE id=$id LIMIT 1")->fetch_assoc();
         $conn->query("DELETE FROM admin WHERE id=$id");
+        admin_audit_log($conn, 'ADMIN_DELETED', "Deleted admin account " . ($old['username'] ?? '#' . $id) . ".", 'admin', $id);
         header("Location: manage_admins.php?msg=deleted"); exit;
     }
 
@@ -80,7 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['del']) || isset($_GET[
             echo "<script>alert('Error: You cannot suspend your own account!'); window.location.href='manage_admins.php';</script>"; exit; 
         }
         // 反转状态: 1 变 0, 0 变 1
+        $old = $conn->query("SELECT username, is_active FROM admin WHERE id=$id LIMIT 1")->fetch_assoc();
         $conn->query("UPDATE admin SET is_active = NOT is_active WHERE id=$id");
+        $new_status = !empty($old['is_active']) ? 'suspended' : 'activated';
+        admin_audit_log($conn, 'ADMIN_STATUS_CHANGED', "Admin account " . ($old['username'] ?? '#' . $id) . " was {$new_status}.", 'admin', $id);
         header("Location: manage_admins.php?msg=status_updated"); exit;
     }
 }
