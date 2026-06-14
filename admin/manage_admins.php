@@ -213,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['del']) || isset($_GET[
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Access Level</label>
                     <select name="role" id="role" class="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-primary outline-none font-bold cursor-pointer">
                         <option value="super_admin">Super Admin (Full Access)</option>
-                        <option value="manager">Manager (Read Only)</option>
+                        <option value="manager">Manager (Limit Access)</option>
                     </select>
                 </div>
                 <div>
