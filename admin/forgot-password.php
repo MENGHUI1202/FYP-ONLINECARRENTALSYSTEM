@@ -8,7 +8,7 @@ require 'src/PHPMailer.php';
 require 'src/SMTP.php';
 $msg = "";
 $error = "";
-$debug_link = ""; 
+$debug_link = "";
 
 // 【关键增强】计算当前剩余的冷却时间，传给前端 JS
 $remaining_time = 0;
